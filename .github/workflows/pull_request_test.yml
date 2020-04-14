@@ -21,4 +21,4 @@ jobs:
         pr_body: ":crown: *An automated PR*  This PR will pull all recent merges from DEVELOP into TEST"
         pr_label: "auto-pr from dev to test"
         pr_draft: true
-        github_token: ${{ secrets.GITHUB_TOKEN }}
+        github_token: ${{ secrets.PR_TO_TEST_TOKEN }}
