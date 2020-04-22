@@ -311,7 +311,7 @@ pipeline {
 
     stage('Setup PR env') {
       steps {
-        echo "My branch is: ${SUFFIX}"
+        echo "My branch is: ${PR_NAME}"
         when {
           checkForPRDeployment()
         }
