@@ -320,7 +320,7 @@ pipeline {
       // debug step, check params are updated correctly, remove later
       input {
         message 'Verify params, click to continue',
-        ok "Continue",
+        ok "Continue"
       }
     }
 
