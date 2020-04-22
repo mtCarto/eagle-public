@@ -235,43 +235,47 @@ def nodejsSonarqube () {
   }
 }
 
-def checkForPRDeployment() {
-  echo "My branch is: ${env.BRANCH_NAME}"
-
+boolean checkForPRDeployment() {
   _openshift(env.STAGE_NAME, 'esm-dev') {
     def dcCount = openshift.selector('dc', 'pr-eagle-public').count()
     echo "count: ${dcCount}"
     if (dcCount == 0) {
-      return true
+      echo "no deployments, return false"
+      return 'false'
     } else {
-      return false
+      return 'true'
     }
   }
 }
 
 def createPRDeployment() {
   // todo shallow clone
-  sh 'git clone https://github.com/bcgov/eagle-helper-pods'
-  // pull helper-pods repo
-  // sed replace pr-placeholder with branch name (ensure other apps (api,admin) use dev tag)
-  // run setup script
+  echo "Configuring deployment scripts"
   try {
     sh '''
+      if [[ -d "eagle-helper-pods" ]]
+      then
+        echo "existing helper pods checkout"
+        pwd
+        rm -rf eagle-helper-pods
+        pwd
+      fi
+      git clone https://github.com/bcgov/eagle-helper-pods
       cd eagle-helper-pods/openshift/setup-teardown/
 
-      find . -name "projectset.config" -exec sed i- "" -e "s/^\( *TARGET_PROJECT_SET=*\)[^ ]*\(.*\)*$/\1PR\2/" {} \;
-
-      // set unique name (ie. pr-branchName) for pr builds & deployments
+      find . -name "projectset.config" -exec sed -i "" -e "s/^\\( *TARGET_PROJECT_SET=*\\)[^ ]*\\(.*\\)*$/\\1PR\\2/" {} \\;
+      # set unique name (ie. pr-branchName) for pr builds & deployments
       cd params/CUSTOM_SETTINGS/PR
-      find . -name "*.params" -exec sed -i "" -e "s/pr-placeholder/${PR_NAME}/g" {} \;
-      find . -name "*.config" -exec sed -i "" -e "s/pr-placeholder/${PR_NAME}/g" {} \;
+      find . -name "*.params" -exec sed -i "" -e "s/pr-placeholder/${PR_NAME}/g" {} \\;
+      find . -name "*.config" -exec sed -i "" -e "s/pr-placeholder/${PR_NAME}/g" {} \\;
 
       cd public/dev
-      find . -name "*.params" -exec sed -i "" -e "s/TAG_NAME=dev/TAG_NAME=${PR_NAME}/g" {} \;
+      find . -name "*.params" -exec sed -i "" -e "s/TAG_NAME=dev/TAG_NAME=${PR_NAME}/g" {} \\;
 
-      // create builds and deploys
+      # create builds and deploys
       cd ../..
     '''
+    echo "deployment scripts configured"
   } catch (error) {
     notifyRocketChat(
       "@all The build ${env.BUILD_DISPLAY_NAME} of eagle-public dev-pr, seems to be broken.\n ${env.RUN_DISPLAY_URL}\n Error: \n ${error.message}",
@@ -287,8 +291,9 @@ def IMAGE_HASH = "latest"
 def lockName = "eagle-public-${env.JOB_NAME}-${env.BUILD_NUMBER}"
 pipeline {
   environment {
-    TOOLSPROJECT = "esm",
-    PR_NAME = "pr-${env.GIT_LOCAL_BRANCH}"
+    TOOLSPROJECT = "esm"
+    GIT_BRANCH = sh(returnStdout: true, script: 'git rev-parse --abbrev-ref HEAD').trim()
+    PR_NAME = "pr-${env.GIT_BRANCH}"
   }
   agent any
   stages {
@@ -300,27 +305,35 @@ pipeline {
       }
     }
 
-    stage('Sonarqube') {
+    // stage('Sonarqube') {
+    //  steps {
+    //    script {
+    //      echo "Running Sonarqube"
+    //      def result = nodejsSonarqube()
+    //    }
+    //  }
+    // }
+
+    stage('Setup PR env') {
       steps {
         script {
-          echo "Running Sonarqube"
-          def result = nodejsSonarqube()
+          def existingDeploy = checkForPRDeployment()
+          echo "My branch is: ${PR_NAME}"
+          if (!existingDeploy) {
+            // env hasn't been created, call setup scripts
+            echo "Deploying PR Environment"
+            createPRDeployment()
+          } else {
+            echo "Deployment for this PR already exists, skipping deploy all"
+          }
         }
       }
     }
 
-    stage('Setup PR env') {
-      echo "My branch is: ${SUFFIX}"
-      when {
-        checkForPRDeployment()
-      }
-      // env hasn't been created, call setup scripts
-      echo "Deploying PR Environment"
-      createPRDeployment()
-      // debug step, check params are updated correctly, remove later
-      input {
-        message: 'Verify params, click to continue',
-        ok: "Continue",
+    stage('Debug - pause') {
+      steps {
+        input 'Continue?'
+        echo 'params checked - continuing'
       }
     }
 
