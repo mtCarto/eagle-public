@@ -322,10 +322,17 @@ pipeline {
     }
 
     stage('Debug - pause') {
-      input {
-        message 'Verify params, click to continue',
-        ok "Continue"
-      }
+      def inputAction = input(
+              message: "This step (${name}) has failed. See related messages:",
+              ok: 'Confirm',
+              parameters: [
+                choice(
+                  name: 'action',
+                  choices: 'Re-run\nIgnore',
+                  description: 'What would you like to do?'
+                )
+              ]
+      )
       steps {
         echo 'params checked - continuing'
       }
