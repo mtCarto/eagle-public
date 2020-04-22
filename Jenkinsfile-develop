@@ -312,6 +312,7 @@ pipeline {
     stage('Setup PR env') {
       steps {
         echo "My branch is: ${PR_NAME}"
+        echo "test pr"
         when {
           checkForPRDeployment()
         }
