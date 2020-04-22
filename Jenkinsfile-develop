@@ -318,11 +318,16 @@ pipeline {
         // env hasn't been created, call setup scripts
         echo "Deploying PR Environment"
         createPRDeployment()
-        // debug step, check params are updated correctly, remove later
-        input {
-          message 'Verify params, click to continue',
-          ok "Continue"
-        }
+      }
+    }
+
+    stage('Debug - pause') {
+      input {
+        message 'Verify params, click to continue',
+        ok "Continue"
+      }
+      steps {
+        echo 'params checked - continuing'
       }
     }
 
