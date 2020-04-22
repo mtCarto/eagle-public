@@ -263,11 +263,11 @@ def createPRDeployment() {
 
       // set unique name (ie. pr-branchName) for pr builds & deployments
       cd params/CUSTOM_SETTINGS/PR
-      find . -name "*.params" -exec sed -i "" -e "s/pr-placeholder/${PR_NAME}/g" {} \;
-      find . -name "*.config" -exec sed -i "" -e "s/pr-placeholder/${PR_NAME}/g" {} \;
+      find . -name "*.params" -exec sed -i "" -e "s/pr-placeholder/${PR_NAME}/g" {} \\;
+      find . -name "*.config" -exec sed -i "" -e "s/pr-placeholder/${PR_NAME}/g" {} \\;
 
       cd public/dev
-      find . -name "*.params" -exec sed -i "" -e "s/TAG_NAME=dev/TAG_NAME=${PR_NAME}/g" {} \;
+      find . -name "*.params" -exec sed -i "" -e "s/TAG_NAME=dev/TAG_NAME=${PR_NAME}/g" {} \\;
 
       // create builds and deploys
       cd ../..
