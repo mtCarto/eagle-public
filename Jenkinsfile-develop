@@ -323,7 +323,7 @@ pipeline {
 
     stage('Debug - pause') {
       steps {
-        input 'Continue?'ß
+        input 'Continue?'
         echo 'params checked - continuing'
       }
     }
