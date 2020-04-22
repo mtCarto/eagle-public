@@ -287,7 +287,7 @@ def IMAGE_HASH = "latest"
 def lockName = "eagle-public-${env.JOB_NAME}-${env.BUILD_NUMBER}"
 pipeline {
   environment {
-    TOOLSPROJECT = "esm",
+    TOOLSPROJECT = "esm"
     PR_NAME = "pr-${env.GIT_LOCAL_BRANCH}"
   }
   agent any
