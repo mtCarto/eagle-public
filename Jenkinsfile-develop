@@ -310,17 +310,19 @@ pipeline {
     }
 
     stage('Setup PR env') {
-      echo "My branch is: ${SUFFIX}"
-      when {
-        checkForPRDeployment()
-      }
-      // env hasn't been created, call setup scripts
-      echo "Deploying PR Environment"
-      createPRDeployment()
-      // debug step, check params are updated correctly, remove later
-      input {
-        message 'Verify params, click to continue',
-        ok "Continue"
+      steps {
+        echo "My branch is: ${SUFFIX}"
+        when {
+          checkForPRDeployment()
+        }
+        // env hasn't been created, call setup scripts
+        echo "Deploying PR Environment"
+        createPRDeployment()
+        // debug step, check params are updated correctly, remove later
+        input {
+          message 'Verify params, click to continue',
+          ok "Continue"
+        }
       }
     }
 
