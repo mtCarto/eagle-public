@@ -276,6 +276,8 @@ def createPRDeployment() {
 
       # create builds and deploys
       cd ../../..
+      pwd
+      ls
       ./setup-all.sh
     '''
     echo "deployment scripts configured"
