@@ -275,7 +275,7 @@ def createPRDeployment() {
       find . -name "*.params" -exec sed -i -e "s/TAG_NAME=dev/TAG_NAME=${PR_NAME}/g" {} \\;
 
       # create builds and deploys
-      cd ../..
+      cd ../../../../..
       ./setup-all.sh
     '''
     echo "deployment scripts configured"
