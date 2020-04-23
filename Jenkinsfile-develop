@@ -255,7 +255,7 @@ def createPRDeployment() {
     sh '''
       if [[ -d "eagle-helper-pods" ]]
       then
-        echo "existing helper pods checkout"
+        echo "stale helper pods checkout, removing it"
         pwd
         rm -rf eagle-helper-pods
         pwd
@@ -263,14 +263,14 @@ def createPRDeployment() {
       git clone https://github.com/bcgov/eagle-helper-pods
       cd eagle-helper-pods/openshift/setup-teardown/
 
-      find . -name "projectset.config" -exec sed -i "" -e "s/^\\( *TARGET_PROJECT_SET=*\\)[^ ]*\\(.*\\)*$/\\1PR\\2/" {} \\;
+      find . -name "projectset.config" -exec sed -i -e "s/^\\( *TARGET_PROJECT_SET=*\\)[^ ]*\\(.*\\)*$/\\1PR\\2/" {} \\;
       # set unique name (ie. pr-branchName) for pr builds & deployments
       cd params/CUSTOM_SETTINGS/PR
-      find . -name "*.params" -exec sed -i "" -e "s/pr-placeholder/${PR_NAME}/g" {} \\;
-      find . -name "*.config" -exec sed -i "" -e "s/pr-placeholder/${PR_NAME}/g" {} \\;
+      find . -name "*.params" -exec sed -i -e "s/pr-placeholder/${PR_NAME}/g" {} \\;
+      find . -name "*.config" -exec sed -i -e "s/pr-placeholder/${PR_NAME}/g" {} \\;
 
       cd public/dev
-      find . -name "*.params" -exec sed -i "" -e "s/TAG_NAME=dev/TAG_NAME=${PR_NAME}/g" {} \\;
+      find . -name "*.params" -exec sed -i -e "s/TAG_NAME=dev/TAG_NAME=${PR_NAME}/g" {} \\;
 
       # create builds and deploys
       cd ../..
