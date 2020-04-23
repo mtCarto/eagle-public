@@ -263,7 +263,9 @@ def createPRDeployment() {
       git clone https://github.com/bcgov/eagle-helper-pods
       cd eagle-helper-pods/openshift/setup-teardown/
 
+      # set project to PR deployment template folder
       find . -name "projectset.config" -exec sed -i -e "s/^\\( *TARGET_PROJECT_SET=*\\)[^ ]*\\(.*\\)*$/\\1PR\\2/" {} \\;
+
       # set unique name (ie. pr-branchName) for pr builds & deployments
       cd params/CUSTOM_SETTINGS/PR
       find . -name "*.params" -exec sed -i -e "s/pr-placeholder/${PR_NAME}/g" {} \\;
@@ -274,6 +276,7 @@ def createPRDeployment() {
 
       # create builds and deploys
       cd ../..
+      ./setup-all.sh
     '''
     echo "deployment scripts configured"
   } catch (error) {
