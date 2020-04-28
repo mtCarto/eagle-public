@@ -136,7 +136,7 @@ def getChangeLog(pastBuilds) {
 
 def sonarQubeJenkinsNode () {
   _openshift(env.STAGE_NAME, TOOLSPROJECT) {
-    node(sonarLabel) {
+    node({label 'test'}) {
         checkout scm
         dir('sonar-runner') {
           try {
