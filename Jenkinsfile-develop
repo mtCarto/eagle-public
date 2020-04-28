@@ -145,7 +145,7 @@ def sonarQubeJenkinsNode () {
             sh returnStdout: true, script: "./gradlew sonarqube -Dsonar.host.url=${SONARQUBE_URL_INT} -Dsonar.verbose=true --stacktrace --info"
 
             // check if sonarqube passed
-            SONARQUBE_STATUS_URL = "${SONARQUBE_URL_EXT}/api/qualitygates/project_status?projectKey=org.sonarqube:eagle-public"
+            SONARQUBE_STATUS_URL = "${SONARQUBE_URL_EXT}/api/qualitygates/project_status?projectKey=eagle-public"
 
             boolean firstScan = false;
             def OLD_SONAR_DATE
@@ -190,7 +190,6 @@ def sonarQubeJenkinsNode () {
               // )
 
               currentBuild.result = 'FAILURE'
-              exit 1
             } else {
               echo "Scan Passed"
             }
