@@ -145,7 +145,7 @@ def sonarQubeJenkinsNode () {
             sh returnStdout: true, script: "./gradlew sonarqube -Dsonar.host.url=${SONARQUBE_URL_INT} -Dsonar.verbose=true --stacktrace --info"
 
             // check if sonarqube passed
-            SONARQUBE_STATUS_URL = ${SONARQUBE_URL_EXT}
+            SONARQUBE_STATUS_URL = SONARQUBE_URL_EXT
 
             boolean firstScan = false;
             def OLD_SONAR_DATE
