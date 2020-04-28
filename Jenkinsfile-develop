@@ -141,15 +141,11 @@ def sonarQubeJenkinsNode () {
         dir('sonar-runner') {
           try {
             // run scan
-            sh("oc extract secret/sonarqube-secrets --to=${env.WORKSPACE}/sonar-runner --confirm")
-            SONARQUBE_URL = sh(returnStdout: true, script: 'cat sonarqube-route-url')
-
             sh "npm install typescript"
-            sh returnStdout: true, script: "./gradlew sonarqube -Dsonar.host.url=${SONARQUBE_URL} -Dsonar. -Dsonar.verbose=true --stacktrace --info"
+            sh returnStdout: true, script: "./gradlew sonarqube -Dsonar.host.url=${SONARQUBE_URL_INT} -Dsonar.verbose=true --stacktrace --info"
 
             // check if sonarqube passed
-            sh("oc extract secret/sonarqube-status-urls --to=${env.WORKSPACE}/sonar-runner --confirm")
-            SONARQUBE_STATUS_URL = sh(returnStdout: true, script: 'cat sonarqube-status-public')
+            SONARQUBE_STATUS_URL = ${SONARQUBE_URL_EXT}
 
             boolean firstScan = false;
             def OLD_SONAR_DATE
@@ -166,10 +162,10 @@ def sonarQubeJenkinsNode () {
               if ( !sonarqubeReportComplete ( OLD_SONAR_DATE, SONARQUBE_STATUS_URL ) ) {
                 echo "sonarqube report failed to complete, or timed out"
 
-                notifyRocketChat(
-                  "@all The latest build, ${env.BUILD_DISPLAY_NAME} of eagle-public seems to be broken. \n ${env.RUN_DISPLAY_URL}\n Error: \n sonarqube report failed to complete, or timed out : ${SONARQUBE_URL}",
-                  ROCKET_DEPLOY_WEBHOOK
-                )
+                // notifyRocketChat(
+                //   "@all The latest build, ${env.BUILD_DISPLAY_NAME} of eagle-public seems to be broken. \n ${env.RUN_DISPLAY_URL}\n Error: \n sonarqube report failed to complete, or timed out : ${SONARQUBE_URL}",
+                //   ROCKET_DEPLOY_WEBHOOK
+                // )
 
                 currentBuild.result = "FAILURE"
                 exit 1
@@ -188,10 +184,10 @@ def sonarQubeJenkinsNode () {
             if ( "${SONARQUBE_STATUS}" == "ERROR") {
               echo "Scan Failed"
 
-              notifyRocketChat(
-                "@all The latest build ${env.BUILD_DISPLAY_NAME} of eagle-public seems to be broken. \n ${env.RUN_DISPLAY_URL}\n Error: \n ${error.message}",
-                ROCKET_DEPLOY_WEBHOOK
-              )
+              // notifyRocketChat(
+              //   "@all The latest build ${env.BUILD_DISPLAY_NAME} of eagle-public seems to be broken. \n ${env.RUN_DISPLAY_URL}\n Error: \n ${error.message}",
+              //   ROCKET_DEPLOY_WEBHOOK
+              // )
 
               currentBuild.result = 'FAILURE'
               exit 1
@@ -199,10 +195,10 @@ def sonarQubeJenkinsNode () {
               echo "Scan Passed"
             }
           } catch (error) {
-            notifyRocketChat(
-              "@all The latest build ${env.BUILD_DISPLAY_NAME} of eagle-public seems to be broken. \n ${env.BUILD_URL}\n Error: \n ${error.message}",
-              ROCKET_DEPLOY_WEBHOOK
-            )
+            // notifyRocketChat(
+            //   "@all The latest build ${env.BUILD_DISPLAY_NAME} of eagle-public seems to be broken. \n ${env.BUILD_URL}\n Error: \n ${error.message}",
+            //   ROCKET_DEPLOY_WEBHOOK
+            // )
             throw error
           } finally {
             echo "Scan Complete"
@@ -249,7 +245,7 @@ def nodejsSonarqube () {
 
             // check if sonarqube passed
             sh("oc extract secret/sonarqube-status-urls --to=${env.WORKSPACE}/sonar-runner --confirm")
-            SONARQUBE_STATUS_URL = sh(returnStdout: true, script: 'cat sonarqube-status-public')
+            SONARQUBE_STATUS_URL = ${SONARQUBE_URL_EXT}
 
             boolean firstScan = false;
             def OLD_SONAR_DATE
@@ -382,6 +378,8 @@ pipeline {
     DEVPROJECT = "md4m71-dev"
     GIT_BRANCH = sh(returnStdout: true, script: 'git rev-parse --abbrev-ref HEAD').trim()
     PR_NAME = gitBranch.toLowerCase()
+    SONARQUBE_URL_INT = 'http://sonarqube:9000'
+    SONARQUBE_URL_EXT = "https://sonarqube-${TOOLSPROJECT}.pathfinder.gov.bc.ca"
   }
   agent any
   stages {
