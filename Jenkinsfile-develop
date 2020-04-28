@@ -168,7 +168,7 @@ def sonarQubeJenkinsNode () {
                 // )
 
                 currentBuild.result = "FAILURE"
-                throw new Error("sonar timed out or failedz")
+                throw new Exception("sonar timed out or failedz")
               }
             } else {
               sleep (30)
