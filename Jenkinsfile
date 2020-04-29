@@ -2,6 +2,7 @@ import groovy.json.JsonOutput
 import groovy.json.JsonSlurper
 import java.util.regex.Pattern
 
+
 /*
  * Sends a rocket chat notification
  */
