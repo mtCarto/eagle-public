@@ -24,19 +24,6 @@ input[type="text"] {
   margin-bottom: 5px;
 }
 
-.btn-outline-secondary {
-  color: #007bff;
-  border-color: #007bff;
-  i {
-  	margin-right: 4px;
-  	font-size: 20px;
-  }
-  &:disabled {
-    border-color: #6c757d;
-    color: #6c757d;
-  }
-}
-
 .search-area {
   background-color: white;
   border: 1px solid lightgray;
@@ -89,6 +76,10 @@ input[type="text"] {
     margin-left: 528px;
   }
 
+  .projectPhase-filters {
+    margin-left: 8px;
+  }
+
   .sub-filter {
     margin-left: 0px;
     margin-bottom: -15px;
@@ -132,6 +123,12 @@ input[type="text"] {
     right: 8px;
     bottom: -8px;
   }
+
+  .search-button-above-disclaimer {
+    position: absolute;
+    right: 8px;
+    bottom: 63px;
+  }
 }
 
 .results {
@@ -154,3 +151,10 @@ input[type="text"] {
         color: #fff;
     }
   }
+  .search-disclaimer {
+    font-size: 12px;
+    line-height: 20px;
+    margin: 8px 8px 8px 0px;
+    padding-left: 12px;
+    color: gray;
+}

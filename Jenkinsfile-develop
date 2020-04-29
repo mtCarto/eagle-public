@@ -1,0 +1,403 @@
+#!/usr/bin/env groovy
+
+import groovy.json.JsonOutput
+import groovy.json.JsonSlurper
+import java.util.regex.Pattern
+
+/*
+ * Sends a rocket chat notification
+ */
+def notifyRocketChat(text, url) {
+    def rocketChatURL = url
+    def message = text.replaceAll(~/\'/, "")
+    def payload = JsonOutput.toJson([
+      "username":"Jenkins",
+      "icon_url":"https://wiki.jenkins.io/download/attachments/2916393/headshot.png",
+      "text": message
+    ])
+
+    sh("curl -X POST -H 'Content-Type: application/json' --data \'${payload}\' ${rocketChatURL}")
+}
+
+// Print stack trace of error
+@NonCPS
+private static String stackTraceAsString(Throwable t) {
+    StringWriter sw = new StringWriter();
+    t.printStackTrace(new PrintWriter(sw));
+    return sw.toString()
+}
+
+def _openshift(String name, String project, Closure body) {
+  script {
+    openshift.withCluster() {
+      openshift.withProject(project) {
+        echo "Running Stage '${name}'"
+        waitUntil {
+          boolean isDone=false
+          try {
+            body()
+            isDone=true
+            echo "Completed Stage '${name}'"
+          } catch (error) {
+            echo "${stackTraceAsString(error)}"
+            def inputAction = input(
+              message: "This step (${name}) has failed. See related messages:",
+              ok: 'Confirm',
+              parameters: [
+                choice(
+                  name: 'action',
+                  choices: 'Re-run\nIgnore',
+                  description: 'What would you like to do?'
+                )
+              ]
+            )
+            if ('Ignore'.equalsIgnoreCase(inputAction)) {
+              notifyRocketChat(
+                "@all The build ${env.BUILD_DISPLAY_NAME} of eagle-public-pr, seems to be broken.\n ${env.RUN_DISPLAY_URL}\n Error: \n ${error.message}",
+              ROCKET_DEPLOY_WEBHOOK
+              )
+              isDone=true
+            }
+          }
+          return isDone
+        }
+      }
+    }
+  }
+}
+
+/*
+ * takes in a sonarqube status json payload
+ * and returns the status string
+ */
+def sonarGetStatus (jsonPayload) {
+  def jsonSlurper = new JsonSlurper()
+  return jsonSlurper.parseText(jsonPayload).projectStatus.status
+}
+
+/*
+ * takes in a sonarqube status json payload
+ * and returns the date string
+ */
+def sonarGetDate (jsonPayload) {
+  def jsonSlurper = new JsonSlurper()
+  return jsonSlurper.parseText(jsonPayload).projectStatus.periods[0].date
+}
+
+boolean sonarqubeReportComplete ( String oldDate, String sonarqubeStatusUrl, def iterations = 6 ) {
+  def oldSonarqubeReportDate = oldDate
+  def newSonarqubeReportDate = sonarGetDate ( sh ( returnStdout: true, script: "curl -w '%{http_code}' '${sonarqubeStatusUrl}'" ) )
+  int delay = 0
+
+  for (int i=0; i<iterations; i++) {
+    echo "waiting for sonarqube report, iterator is: ${i}, max iterator is: ${iterations} \n Old Date: ${oldSonarqubeReportDate} \n New Date: ${newSonarqubeReportDate}"
+    if (oldSonarqubeReportDate != newSonarqubeReportDate) {
+      echo "sonarqube report complete"
+      return true
+    } else {
+      delay = (1<<i) // exponential backoff
+      sleep(delay)
+      newSonarqubeReportDate = sonarGetDate ( sh ( returnStdout: true, script: "curl -w '%{http_code}' '${sonarqubeStatusUrl}'" ) )
+    }
+  }
+  return false
+}
+
+/*
+ * Updates the global pastBuilds array: it will iterate recursively
+ * and add all the builds prior to the current one that had a result
+ * different than 'SUCCESS'.
+ */
+def buildsSinceLastSuccess(previousBuild, build) {
+  if ((build != null) && (build.result != 'SUCCESS')) {
+    pastBuilds.add(build)
+    buildsSinceLastSuccess(pastBuilds, build.getPreviousBuild())
+  }
+}
+
+/*
+ * Generates a string containing all the commit messages from
+ * the builds in pastBuilds.
+ */
+@NonCPS
+def getChangeLog(pastBuilds) {
+  def log = ""
+  for (int x = 0; x < pastBuilds.size(); x++) {
+    for (int i = 0; i < pastBuilds[x].changeSets.size(); i++) {
+      def entries = pastBuilds[x].changeSets[i].items
+      for (int j = 0; j < entries.length; j++) {
+        def entry = entries[j]
+        log += "* ${entry.msg} by ${entry.author} \n"
+      }
+    }
+  }
+  return log;
+}
+
+def sonarQubeJenkinsNode () {
+  _openshift(env.STAGE_NAME, TOOLSPROJECT) {
+    node('test') {
+        checkout scm
+        dir('sonar-runner') {
+          try {
+            // run scan
+            sh "npm install typescript"
+            sh returnStdout: true, script: "./gradlew sonarqube -Dsonar.host.url=${SONARQUBE_URL_INT} -Dsonar.verbose=true --stacktrace --info"
+
+            // check if sonarqube passed
+            SONARQUBE_STATUS_URL = "${SONARQUBE_URL_EXT}/api/qualitygates/project_status?projectKey=org.sonarqube%3Aeagle-public"
+
+            boolean firstScan = false;
+            def OLD_SONAR_DATE
+            try {
+              // get old sonar report date
+              def OLD_SONAR_DATE_JSON = sh(returnStdout: true, script: "curl -w '%{http_code}' '${SONARQUBE_STATUS_URL}'")
+              OLD_SONAR_DATE = sonarGetDate (OLD_SONAR_DATE_JSON)
+            } catch (error) {
+              firstScan = true
+            }
+
+            if ( !firstScan ) {
+              // wiat for report to be updated
+              if ( !sonarqubeReportComplete ( OLD_SONAR_DATE, SONARQUBE_STATUS_URL ) ) {
+                echo "sonarqube report failed to complete, or timed out"
+
+                // notifyRocketChat(
+                //   "@all The latest build, ${env.BUILD_DISPLAY_NAME} of eagle-public seems to be broken. \n ${env.RUN_DISPLAY_URL}\n Error: \n sonarqube report failed to complete, or timed out : ${SONARQUBE_URL}",
+                //   ROCKET_DEPLOY_WEBHOOK
+                // )
+
+                currentBuild.result = "FAILURE"
+                throw new Exception("sonar timed out or failedz")
+              }
+            } else {
+              sleep (30)
+            }
+
+            SONARQUBE_STATUS_JSON = sh(returnStdout: true, script: "curl -w '%{http_code}' '${SONARQUBE_STATUS_URL}'")
+            SONARQUBE_STATUS = sonarGetStatus (SONARQUBE_STATUS_JSON)
+            echo "${SONARQUBE_STATUS}"
+            if ( "${SONARQUBE_STATUS}" == "ERROR") {
+              echo "Scan Failed"
+
+              // notifyRocketChat(
+              //   "@all The latest build ${env.BUILD_DISPLAY_NAME} of eagle-public seems to be broken. \n ${env.RUN_DISPLAY_URL}\n Error: \n ${error.message}",
+              //   ROCKET_DEPLOY_WEBHOOK
+              // )
+
+              currentBuild.result = 'FAILURE'
+            } else {
+              echo "Scan Passed"
+            }
+          } catch (error) {
+            // notifyRocketChat(
+            //   "@all The latest build ${env.BUILD_DISPLAY_NAME} of eagle-public seems to be broken. \n ${env.BUILD_URL}\n Error: \n ${error.message}",
+            //   ROCKET_DEPLOY_WEBHOOK
+            // )
+            throw error
+          } finally {
+            echo "Scan Complete"
+          }
+        }
+      }
+      return true;
+  }
+}
+
+boolean checkForPRDeployment() {
+  _openshift(env.STAGE_NAME, DEVPROJECT) {
+    def dcCount = openshift.selector('dc', 'pr-eagle-public').count()
+    echo "count: ${dcCount}"
+    if (dcCount == 0) {
+      echo "no deployments, return false"
+      return 'false'
+    } else {
+      return 'true'
+    }
+  }
+}
+
+def createPRDeployment() {
+  // todo shallow clone
+  openshift.withCluster() {
+    echo "Configuring deployment scripts"
+    try {
+      sh '''
+        if [[ -d "eagle-helper-pods" ]]
+        then
+          echo "stale helper pods checkout, removing it"
+          pwd
+          rm -rf eagle-helper-pods
+          pwd
+        fi
+        git clone https://github.com/mtcarto/eagle-helper-pods
+        cd eagle-helper-pods/openshift/setup-teardown/
+
+        # set project to PR deployment template folder
+        find . -name "projectset.config" -exec sed -i -e "s/^\\( *TARGET_PROJECT_SET=*\\)[^ ]*\\(.*\\)*$/\\1PR\\2/" {} \\;
+
+        # set unique name (ie. pr-branchName) for pr builds & deployments
+        cd params/CUSTOM_SETTINGS/PR
+        find . -name "*.params" -exec sed -i -e "s/pr-placeholder/${PR_NAME}/g" {} \\;
+        find . -name "*.config" -exec sed -i -e "s/pr-placeholder/${PR_NAME}/g" {} \\;
+
+        cd public/dev
+        find . -name "*.params" -exec sed -i -e "s/TAG_NAME=dev/TAG_NAME=${PR_NAME}/g" {} \\;
+
+        # create builds and deploys
+        cd ../../../../..
+        ./setup-all.sh
+        # switch back to tools project,
+        oc project ${TOOLSPROJECT}
+      '''
+      echo "deployment scripts configured and PR env created"
+    } catch (error) {
+      notifyRocketChat(
+        "@all The build ${env.BUILD_DISPLAY_NAME} of eagle-public dev-pr, seems to be broken.\n ${env.RUN_DISPLAY_URL}\n Error: \n ${error.message}",
+        ROCKET_DEPLOY_WEBHOOK
+      )
+      currentBuild.result = 'FAILURE'
+      throw new Exception("Full PR env deployment failed")
+    }
+  }
+}
+
+def CHANGELOG = "No new changes"
+def IMAGE_HASH = "latest"
+def lockName = "eagle-public-${env.JOB_NAME}-${env.BUILD_NUMBER}"
+def gitBranch = "pr-${env.GIT_BRANCH}"
+pipeline {
+  environment {
+    TOOLSPROJECT = "md4m71-tools"
+    DEVPROJECT = "md4m71-dev"
+    GIT_BRANCH = sh(returnStdout: true, script: 'git rev-parse --abbrev-ref HEAD').trim()
+    PR_NAME = gitBranch.toLowerCase()
+    SONARQUBE_URL_INT = 'http://sonarqube:9000'
+    SONARQUBE_URL_EXT = "https://sonarqube-${TOOLSPROJECT}.pathfinder.gov.bc.ca"
+  }
+  agent any
+  stages {
+    stage('Build Init') {
+      steps {
+        script {
+          openshift.setLockName(lockName)
+        }
+      }
+    }
+
+    // stage('Sonarqube') {
+    //  steps {
+    //    script {
+    //      echo "Running Sonarqube"
+    //      def result = sonarQubeJenkinsNode()
+    //    }
+    //  }
+    // }
+
+    stage('Setup PR env') {
+      steps {
+        script {
+          // sh("oc extract secret/rocket-chat-secrets --to=${env.WORKSPACE} --confirm")
+          def existingDeploy = checkForPRDeployment()
+          echo "My branch is: ${PR_NAME}"
+          if (!existingDeploy) {
+            // env hasn't been created, call setup scripts
+            echo "Deploying PR Environment"
+            createPRDeployment()
+          } else {
+            echo "Deployment for this PR already exists, skipping deploy all"
+          }
+        }
+      }
+    }
+
+    stage('Build') {
+      agent any
+      steps {
+        script {
+          pastBuilds = []
+          buildsSinceLastSuccess(pastBuilds, currentBuild);
+          CHANGELOG = getChangeLog(pastBuilds);
+
+          echo ">>>>>>Changelog: \n ${CHANGELOG}"
+          _openshift(env.STAGE_NAME, TOOLSPROJECT) {
+            timeout(10) {
+              // sh("oc extract secret/rocket-chat-secrets --to=${env.WORKSPACE} --confirm")
+              // ROCKET_DEPLOY_WEBHOOK = sh(returnStdout: true, script: 'cat rocket-deploy-webhook')
+              // ROCKET_QA_WEBHOOK = sh(returnStdout: true, script: 'cat rocket-qa-webhook')
+
+              echo "Building eagle-public develop branch"
+              // trigger and wait for s2i build to complete
+              def bcObj1 = openshift.selector('bc', "${PR_NAME}-eagle-public-angular-builder")
+              bcObj1.untilEach(1) {
+                return it.object().status.phase == "Complete"
+              }
+              //  trigger and wait for nginx image build to complete
+              def bcObj2 = openshift.selector('bc',"${PR_NAME}-eagle-public-build" )
+              bcObj2.untilEach(1) {
+                return it.object().status.phase == "Complete"
+              }
+
+              echo "Build done"
+
+              echo ">>> Get Image Hash"
+              // Don't tag with BUILD_ID so the pruner can do it's job; it won't delete tagged images.
+              // Tag the images for deployment based on the image's hash
+              IMAGE_HASH = sh (
+                script: """oc get istag eagle-public:latest -o template --template=\"{{.image.dockerImageReference}}\"|awk -F \":\" \'{print \$3}\'""",
+                returnStdout: true).trim()
+              echo ">> IMAGE_HASH: ${IMAGE_HASH}"
+            }
+          }
+        }
+      }
+    }
+
+    stage('Deploy to dev'){
+      agent any
+      steps {
+        script {
+          try {
+            openshift.withCluster() {
+              openshift.withProject(TOOLSPROJECT) {
+                echo "Deploying to dev..."
+                openshift.tag("${TOOLSPROJECT}/${PR_NAME}-eagle-public:${IMAGE_HASH}", "${TOOLSPROJECT}/${PR_NAME}-eagle-public:${PR_NAME}")
+              }
+
+              openshift.withProject(DEVPROJECT) {
+                def dcObj = openshift.selector('dc', "${PR_NAME}-eagle-public")
+                dcObj.rollout().status()
+                echo ">>>> Deployment Complete"
+
+                // notifyRocketChat(
+                //   "A new version of eagle-public ${PR_NAME} is now in Dev, build: ${env.BUILD_DISPLAY_NAME} \n Changes: \n ${CHANGELOG}",
+                //   ROCKET_DEPLOY_WEBHOOK
+                // )
+                // notifyRocketChat(
+                //   "@all A new version of eagle-public is now in Dev and ready for QA. \n Changes to Dev: \n ${CHANGELOG}",
+                //   ROCKET_QA_WEBHOOK
+                // )
+              }
+            }
+          } catch (error) {
+            // notifyRocketChat(
+            //   "@all The build ${env.BUILD_DISPLAY_NAME} of eagle-public, seems to be broken.\n ${env.RUN_DISPLAY_URL}\n Error: \n ${error.message}",
+            //   ROCKET_DEPLOY_WEBHOOK
+            // )
+            currentBuild.result = "FAILURE"
+            throw new Exception("Deploy failed")
+          }
+        }
+      }
+    }
+
+    // stage('BDD Tests') {
+    //   agent { label: bddPodLabel }
+      // steps{
+      //   echo "BDD placeholder"
+      //   echo "Build: ${BUILD_ID}"
+        // checkout scm
+      // }
+    // }
+  }
+}

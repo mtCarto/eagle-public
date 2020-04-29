@@ -1,24 +1,24 @@
 export class Project {
   // the following are retrieved from the API
   _id: string;
-  CEAAInvolvement: String;
+  CEAAInvolvement: any;
   CELead: String;
   CELeadEmail: String;
   CELeadPhone: String;
   centroid: Array<number> = [];
   description: String;
-  eacDecision: String;
+  eacDecision: any;
   location: String;
   name: String;
   projectLeadId: String;
-  projectLeadObj: any;
+  projectLeadObj?: any;
   projectLead: String;
   projectLeadEmail: String;
   projectLeadPhone: String;
   proponent: any;
   region: String;
   responsibleEPDId: String;
-  responsibleEPDObj: any;
+  responsibleEPDObj?: any;
   responsibleEPD: String;
   responsibleEPDEmail: String;
   responsibleEPDPhone: String;
@@ -27,18 +27,20 @@ export class Project {
 
   // Everything else
   addedBy: String;
-  build: String;
+  build: string;
   CEAALink: String;
   code: String;
   commodity: String;
-  currentPhaseName: string;
+  currentPhaseName: any;
+  phaseHistory: any[];
   dateAdded: String;
+  dateCommentsClosed: String;
   dateUpdated: String;
   decisionDate: String;
   duration: String;
   // TODO: directoryStructure
   eaoMember: String;
-  epicProjectID: Number;
+  epicProjectID?: Number;
   fedElecDist: String;
   // TODO: intake
   isTermsAgreed: Boolean;
@@ -50,20 +52,23 @@ export class Project {
   shortName: String;
   status: String;
   substitution: Boolean;
-  updatedBy: String;
-  operational: any;
-  nature: any;
+  updatedBy?: String;
+  operational?: any;
+  nature?: any;
   commentPeriodForBanner: any;
+  projectCAC: Boolean;
+  cacEmail: any;
 
   // Permissions
-  read: Array<String> = [];
-  write: Array<String> = [];
-  delete: Array<String> = [];
+  read?: Array<String> = [];
+  write?: Array<String> = [];
+  delete?: Array<String> = [];
 
-  isMatches = true;
-  isVisible = true;
-  isLoaded = false;
+  isMatches?: Boolean = true;
+  isVisible?: Boolean = true;
+  isLoaded?: Boolean = false;
 
+  featuredDocuments?: Array<Document> = [];
 
 
   constructor(obj?: any) {
@@ -98,6 +103,7 @@ export class Project {
     this.code                = obj && obj.code                || null;
     this.commodity           = obj && obj.commodity           || null;
     this.currentPhaseName    = obj && obj.currentPhaseName    || null;
+    this.phaseHistory        = obj && obj.phaseHistory        || null;
     this.dateAdded           = obj && obj.dateAdded           || null;
     this.dateUpdated         = obj && obj.dateUpdated         || null;
     this.decisionDate        = obj && obj.decisionDate        || null;
@@ -116,21 +122,13 @@ export class Project {
     this.substitution        = obj && obj.substitution        || null;
     this.updatedBy           = obj && obj.updatedBy           || null;
     this.commentPeriodForBanner           = obj && obj.commentPeriodForBanner           || null;
+    this.cacEmail            = obj && obj.cacEmail            || null;
+    this.projectCAC          = obj && obj.projectCAC          || null;
     this.read                = obj && obj.read                || null;
     this.write               = obj && obj.write               || null;
     this.delete              = obj && obj.delete              || null;
 
-    // if (obj && obj.publishDate) {
-    //   this.publishDate = new Date(obj.publishDate);
-    // }
-
-    // // replace \\n (JSON format) with newlines
-    // if (obj && obj.description) {
-    //   this.description = obj.description.replace(/\\n/g, '\n');
-    // }
-    // if (obj && obj.legalDescription) {
-    //   this.legalDescription = obj.legalDescription.replace(/\\n/g, '\n');
-    // }
+    this.featuredDocuments   = obj && obj.featuredDocuments   || [];
 
     // copy centroid
     if (obj && obj.centroid) {
@@ -138,23 +136,5 @@ export class Project {
         this.centroid.push(num);
       });
     }
-
-    // if (obj && obj.decision) {
-    //   this.decision = new Decision(obj.decision);
-    // }
-
-    // // copy documents
-    // if (obj && obj.documents) {
-    //   for (const doc of obj.documents) {
-    //     this.documents.push(doc);
-    //   }
-    // }
-
-    // // copy features
-    // if (obj && obj.features) {
-    //   for (const feature of obj.features) {
-    //     this.features.push(feature);
-    //   }
-    // }
   }
 }

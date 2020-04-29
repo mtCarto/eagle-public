@@ -19,6 +19,7 @@ import { DocumentTableRowsComponent } from './project-document-table-rows/projec
 import { ApiService } from 'app/services/api';
 import { SearchService } from 'app/services/search.service';
 import { StorageService } from 'app/services/storage.service';
+import { Constants } from 'app/shared/utils/constants';
 
 class DocumentFilterObject {
   constructor(
@@ -26,6 +27,7 @@ class DocumentFilterObject {
     public datePostedStart: object = {},
     public datePostedEnd: object = {},
     public type: Array<string> = [],
+    public projectPhase: Array<string> = [],
     public documentAuthorType: Array<string> = []
   ) { }
 }
@@ -38,9 +40,11 @@ class DocumentFilterObject {
 
 export class DocumentsTabComponent implements OnInit, OnDestroy {
   public documents: Document[] = null;
+
   public milestones: any[] = [];
   public authors: any[] = [];
   public types: any[] = [];
+  public projectPhases: any[] = [];
 
   public loading = true;
 
@@ -53,27 +57,39 @@ export class DocumentsTabComponent implements OnInit, OnDestroy {
   public filterForUI: DocumentFilterObject = new DocumentFilterObject();
 
   public showAdvancedSearch = true;
+  public hasUncategorizedDocs = false;
+  public readonly constants = Constants;
 
   public showFilters: object = {
-    milestone: false,
     date: false,
-    documentAuthorType: false,
-    type: false
+    type: false,
+    milestone: false,
+    projectPhase: false,
+    documentAuthorType: false
   };
 
+  public searchDisclaimer = Constants.searchDisclaimer;
+
   public numFilters: object = {
-    milestone: 0,
     date: 0,
-    documentAuthorType: 0,
-    type: 0
+    type: 0,
+    milestone: 0,
+    projectPhase: 0,
+    documentAuthorType: 0
   };
 
   public documentTableData: TableObject;
+
   public documentTableColumns: any[] = [
+    {
+      name: '★',
+      value: 'isFeatured',
+      width: 'col-1'
+    },
     {
       name: 'Name',
       value: 'displayName',
-      width: 'col-6'
+      width: 'col-3'
     },
     {
       name: 'Date',
@@ -88,6 +104,11 @@ export class DocumentsTabComponent implements OnInit, OnDestroy {
     {
       name: 'Milestone',
       value: 'milestone',
+      width: 'col-2'
+    },
+    {
+      name: 'Phase',
+      value: 'phase',
       width: 'col-2'
     }
   ];
@@ -119,38 +140,51 @@ export class DocumentsTabComponent implements OnInit, OnDestroy {
         if (res) {
           // Get the lists first
           if (res.documentsTableRow && res.documentsTableRow.length > 0) {
+
+            this.milestones = [];
+            this.types = [];
+            this.authors = [];
+            this.projectPhases = [];
+
             res.documentsTableRow[0].searchResults.map(item => {
-              switch (item.type) {
-                case 'label':
-                  this.milestones.push({ ...item });
-                  break;
-                case 'author':
-                  this.authors.push({ ...item });
-                  break;
-                case 'doctype':
-                  this.types.push({ ...item });
-                  break;
-                default:
-                  break;
+              if (item.type === 'label') {
+                this.milestones.push({ ...item });
+              } else if (item.type === 'doctype') {
+                this.types.push({ ...item });
+              } else if (item.type === 'author') {
+                this.authors.push({ ...item });
+              } else if (item.type === 'projectPhase') {
+                this.projectPhases.push({ ...item });
               }
             });
 
-            // This code reorders the document type list defined by EAO (See Jira Ticket EAGLE-88)
-            let copy_doctype = this.types;
-            this.types = [];
-            // This order was created by mapping the doctype items from the database with the EAO defined ordered list
-            let docList_order = [0, 1, 2, 6, 10, 11, 14, 4, 3, 5, 13, 16, 15, 17, 18, 19, 7, 8, 9, 12];
-            // We map the doctypes to put in the correct order as defined in doclist_order
-            docList_order.map((item, i) => {
-              this.types[item] = copy_doctype[i];
-            });
+            // Sort by legislation.
+            this.milestones = _.sortBy(this.milestones, ['legislation']);
+            this.authors = _.sortBy(this.authors, ['legislation']);
+            this.types = _.sortBy(this.types, ['legislation', 'listOrder']);
+            this.projectPhases = _.sortBy(this.projectPhases, ['legislation']);
+          }
+
+          this.currentProject = this.storageService.state.currentProject.data;
+
+          if (this.currentProject && this.storageService.state[this.currentProject._id]) {
+            if (this.storageService.state[this.currentProject._id].filterForUI) {
+              this.filterForUI = this.storageService.state[this.currentProject._id].filterForUI;
+              this.setParamsFromFilters(params);
+            }
+
+            if (this.storageService.state[this.currentProject._id].tableParams) {
+              this.tableParams = this.storageService.state[this.currentProject._id].tableParams;
+            }
+          }
+
+          if (!this.tableParams) {
+            this.tableParams = this.tableTemplateUtils.getParamsFromUrl(params, this.filterForURL);
           }
 
           this.setFiltersFromParams(params);
 
           this.updateCounts();
-
-          this.tableParams = this.tableTemplateUtils.getParamsFromUrl(params, this.filterForURL);
 
           if (res.documents && res.documents[0].data.meta && res.documents[0].data.meta.length > 0) {
             this.tableParams.totalListItems = res.documents[0].data.meta[0].searchResultsTotal;
@@ -168,10 +202,40 @@ export class DocumentsTabComponent implements OnInit, OnDestroy {
           // project not found --> navigate back to search
           this.router.navigate(['/search']);
           this.loading = false;
+          this._changeDetectionRef.detectChanges();
         }
       });
 
     this.currentProject = this.storageService.state.currentProject.data;
+
+    if (!this.storageService.state[this.currentProject._id]) {
+      this.storageService.state[this.currentProject._id] = {};
+    }
+
+    this.searchService.getSearchResults(
+      '',
+      'Document',
+      [
+        { name: 'project', value: this.currentProject._id },
+        { name: 'categorized', value: false }
+      ],
+      this.storageService.state[this.currentProject._id].tableParams ? this.storageService.state[this.currentProject._id].tableParams.currentPage : 1,
+      this.storageService.state[this.currentProject._id].tableParams ? this.storageService.state[this.currentProject._id].tableParams.pageSize : 10,
+      this.storageService.state[this.currentProject._id].tableParams ? this.storageService.state[this.currentProject._id].tableParams.sortBy : '-datePosted',
+      { documentSource: 'PROJECT' },
+      true,
+      null,
+      this.filterForAPI,
+      ''
+    )
+    .takeUntil(this.ngUnsubscribe)
+    .subscribe((res: any) => {
+      if (res[0].data.meta && res[0].data.meta.length > 0) {
+        this.hasUncategorizedDocs = true;
+        this.loading = false;
+        this._changeDetectionRef.detectChanges();
+      }
+    });
   }
 
   navSearchHelp() {
@@ -239,7 +303,9 @@ export class DocumentsTabComponent implements OnInit, OnDestroy {
               type: document.type,
               milestone: document.milestone,
               _id: document._id,
-              project: document.project
+              project: document.project,
+              isFeatured: document.isFeatured,
+              projectPhase: document.projectPhase
             }
           );
         }
@@ -275,7 +341,6 @@ export class DocumentsTabComponent implements OnInit, OnDestroy {
   }
 
   paramsToCollectionFilters(params, name, collection, identifyBy) {
-    this.filterForUI[name] = [];
     delete this.filterForURL[name];
     delete this.filterForAPI[name];
 
@@ -286,7 +351,6 @@ export class DocumentsTabComponent implements OnInit, OnDestroy {
       values.forEach(value => {
         const record = _.find(collection, [ identifyBy, value ]);
         if (record) {
-          this.filterForUI[name].push(record);
           confirmedValues.push(value);
         }
       });
@@ -315,6 +379,7 @@ export class DocumentsTabComponent implements OnInit, OnDestroy {
     this.paramsToCollectionFilters(params, 'milestone', this.milestones, '_id');
     this.paramsToCollectionFilters(params, 'documentAuthorType', this.authors, '_id');
     this.paramsToCollectionFilters(params, 'type', this.types, '_id');
+    this.paramsToCollectionFilters(params, 'projectPhase', this.projectPhases, '_id');
 
     this.paramsToDateFilters(params, 'datePostedStart');
     this.paramsToDateFilters(params, 'datePostedEnd');
@@ -324,6 +389,7 @@ export class DocumentsTabComponent implements OnInit, OnDestroy {
     if (this.filterForUI[name].length) {
       const values = this.filterForUI[name].map(record => { return record[identifyBy]; });
       params[name] = values.join(',');
+      this.storageService.state[this.currentProject._id].filterForAPI[name] = values.join(',');
     }
   }
 
@@ -342,6 +408,7 @@ export class DocumentsTabComponent implements OnInit, OnDestroy {
     this.collectionFilterToParams(params, 'milestone', '_id');
     this.collectionFilterToParams(params, 'documentAuthorType', '_id');
     this.collectionFilterToParams(params, 'type', '_id');
+    this.collectionFilterToParams(params, 'projectPhase', '_id');
 
     this.dateFilterToParams(params, 'datePostedStart');
     this.dateFilterToParams(params, 'datePostedEnd');
@@ -399,6 +466,7 @@ export class DocumentsTabComponent implements OnInit, OnDestroy {
     this.updateCount('date');
     this.updateCount('documentAuthorType');
     this.updateCount('type');
+    this.updateCount('projectPhase');
   }
 
   getPaginatedDocs(pageNumber) {
@@ -408,6 +476,26 @@ export class DocumentsTabComponent implements OnInit, OnDestroy {
 
     this.tableParams = this.tableTemplateUtils.updateTableParams(this.tableParams, pageNumber, this.tableParams.sortBy);
 
+    // Filters and params are not set when paging
+    // We don't need to redo everything, but we will
+    // need to fetch the dates
+    const params = this.terms.getParams();
+    this.setParamsFromFilters(params);
+
+    const datePostedStart = params.hasOwnProperty('datePostedStart') && params.datePostedStart ? params.datePostedStart : null;
+    const datePostedEnd = params.hasOwnProperty('datePostedEnd') && params.datePostedEnd ? params.datePostedEnd : null;
+
+    let queryModifiers = { documentSource: 'PROJECT' };
+
+    if (datePostedStart !== null && datePostedEnd !== null) {
+      queryModifiers['datePostedStart'] = datePostedStart;
+      queryModifiers['datePostedEnd'] = datePostedEnd;
+    }
+
+    if (this.storageService) {
+      this.storageService.state[this.currentProject._id].tableParams = this.tableParams;
+    }
+
     this.searchService.getSearchResults(
       this.tableParams.keywords,
       'Document',
@@ -415,7 +503,7 @@ export class DocumentsTabComponent implements OnInit, OnDestroy {
       pageNumber,
       this.tableParams.pageSize,
       this.tableParams.sortBy,
-      { documentSource: 'PROJECT' },
+      queryModifiers,
       true,
       null,
       this.filterForAPI,
@@ -431,8 +519,24 @@ export class DocumentsTabComponent implements OnInit, OnDestroy {
       });
   }
 
+  clearSelectedItem(filterKey: string, item: any) {
+    this.filterForUI[filterKey] = this.filterForUI[filterKey].filter(option => option._id !== item._id);
+  }
 
-  public onSubmit(currentPage = 1) {
+
+  public filterCompareWith(filterKey: any, filterToCompare: any) {
+    if (filterKey.hasOwnProperty('code')) {
+      return filterKey && filterToCompare
+              ? filterKey.code === filterToCompare.code
+              : filterKey === filterToCompare;
+    } else if (filterKey.hasOwnProperty('_id')) {
+      return filterKey && filterToCompare
+              ? filterKey._id === filterToCompare._id
+              : filterKey === filterToCompare;
+    }
+  }
+
+  public onSubmit() {
     // dismiss any open snackbar
     // if (this.snackBarRef) { this.snackBarRef.dismiss(); }
 
@@ -448,7 +552,14 @@ export class DocumentsTabComponent implements OnInit, OnDestroy {
     params['keywords'] = this.tableParams.keywords;
     params['pageSize'] = this.tableParams.pageSize;
 
+    if (this.storageService) {
+      this.storageService.state[this.currentProject._id].tableParams = this.tableParams;
+      this.storageService.state[this.currentProject._id].filterForUI = this.filterForUI;
+      this.storageService.state[this.currentProject._id].filterForAPI = {};
+    }
+
     this.setParamsFromFilters(params);
+
 
     this.router.navigate(['p', this.currentProject._id, 'documents', params]);
   }

@@ -2,7 +2,7 @@
   "kind": "Template",
   "apiVersion": "v1",
   "metadata": {
-    "name": "eagle-public-builder",
+    "name": "${NAME}",
     "creationTimestamp": null
   },
   "objects": [
@@ -36,7 +36,7 @@
           "sourceStrategy": {
             "from": {
               "kind": "ImageStreamTag",
-              "name": "nodejs:8",
+              "name": "nodejs:10",
               "namespace": "openshift"
             }
           },
