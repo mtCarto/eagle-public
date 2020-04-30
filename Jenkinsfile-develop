@@ -316,6 +316,7 @@ pipeline {
         script {
           // sh("oc extract secret/rocket-chat-secrets --to=${env.WORKSPACE} --confirm")
           echo "My branch is: ${PR_NAME}"
+          echo "Jenkins says branch: ${env.BRANCH_NAME}"
           echo "Job Name is: ${JOB_BASE_NAME}"
           if (!checkForPRDeployment()) {
             // env hasn't been created, call setup scripts
