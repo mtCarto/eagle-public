@@ -317,6 +317,7 @@ pipeline {
           // sh("oc extract secret/rocket-chat-secrets --to=${env.WORKSPACE} --confirm")
           def existingDeploy = checkForPRDeployment()
           echo "My branch is: ${PR_NAME}"
+          echo "Env var branch is: ${gitBranch}"
           echo "Deploy exists: ${existingDeploy}"
           if (!existingDeploy) {
             // env hasn't been created, call setup scripts
