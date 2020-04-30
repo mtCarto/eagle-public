@@ -4,6 +4,7 @@ import groovy.json.JsonOutput
 import groovy.json.JsonSlurper
 import java.util.regex.Pattern
 
+
 /*
  * Sends a rocket chat notification
  */
@@ -201,6 +202,7 @@ def sonarQubeJenkinsNode () {
         }
       }
       return true;
+<<<<<<< HEAD
   }
 }
 
@@ -219,10 +221,77 @@ boolean checkForPRDeployment() {
       return 'false'
     } else {
       return 'true'
+=======
+  }
+}
+
+def checkForPRDeployment() {
+  def dcCount = 99;
+  _openshift(env.STAGE_NAME, TOOLSPROJECT) {
+    try {
+      dcCount = openshift.selector('bc', "${PR_NAME}-eagle-public-build").count()
+    } catch (error) {
+      echo "${stackTraceAsString(error)}"
+      dcCount = 0
+    }
+    echo "count: ${dcCount}"
+  }
+  if (dcCount == 0) {
+    echo "no deployments, return false"
+    return false
+  } else {
+    return true
+  }
+}
+
+def createPRDeployment() {
+  openshift.withCluster() {
+    echo "Configuring deployment scripts"
+    try {
+      sh '''
+        if [[ -d "eagle-helper-pods" ]]
+        then
+          echo "stale helper pods checkout, removing it"
+          pwd
+          rm -rf eagle-helper-pods
+          pwd
+        fi
+        git clone https://github.com/mtcarto/eagle-helper-pods
+        cd eagle-helper-pods/openshift/setup-teardown/
+        echo "show env"
+        env
+
+        # set project to PR deployment template folder
+        find . -name "projectset.config" -exec sed -i -e "s/^\\( *TARGET_PROJECT_SET=*\\)[^ ]*\\(.*\\)*$/\\1PR\\2/" {} \\;
+
+        # set unique name (ie. pr-branchName) for pr builds & deployments
+        cd params/CUSTOM_SETTINGS/PR
+        find . -name "*.params" -exec sed -i -e "s/pr-placeholder/${PR_NAME}/g" {} \\;
+        find . -name "*.config" -exec sed -i -e "s/pr-placeholder/${PR_NAME}/g" {} \\;
+
+        cd public/dev
+        find . -name "*.params" -exec sed -i -e "s/TAG_NAME=dev/TAG_NAME=${PR_NAME}/g" {} \\;
+
+        # create builds and deploys
+        cd ../../../../..
+        ./setup-all.sh
+        # switch back to tools project,
+        oc project ${TOOLSPROJECT}
+      '''
+      echo "deployment scripts configured and PR env created"
+    } catch (error) {
+      notifyRocketChat(
+        "@all The build ${env.BUILD_DISPLAY_NAME} of eagle-public dev-pr, seems to be broken.\n ${env.RUN_DISPLAY_URL}\n Error: \n ${error.message}",
+        ROCKET_DEPLOY_WEBHOOK
+      )
+      currentBuild.result = 'FAILURE'
+      throw new Exception("Full PR env deployment failed")
+>>>>>>> 53ecf14e27a5a8f50b52aef0d2d5437f4a50c326
     }
   }
 }
 
+<<<<<<< HEAD
 def createPRDeployment() {
   openshift.withCluster() {
     echo "Configuring deployment scripts"
@@ -264,7 +333,18 @@ def createPRDeployment() {
       currentBuild.result = 'FAILURE'
       throw new Exception("Full PR env deployment failed")
     }
+=======
+def cleanUpLock() {
+  def manager = org.jenkins.plugins.lockableresources.LockableResourcesManager.get()
+  def resources = manager.getResources().findAll{
+    !it.locked && it.name.equalsIgnoreCase(lockName)
+>>>>>>> 53ecf14e27a5a8f50b52aef0d2d5437f4a50c326
   }
+  resources.each{
+    manager.getResources().remove(it)
+    echo "Removing lock: ${lockName}"
+  }
+  manager.save()
 }
 
 def cleanUpLock() {
@@ -287,8 +367,12 @@ pipeline {
   environment {
     TOOLSPROJECT = "md4m71-tools"
     DEVPROJECT = "md4m71-dev"
+<<<<<<< HEAD
     GIT_BRANCH = sh(returnStdout: true, script: 'git rev-parse --abbrev-ref HEAD').trim()
     PR_NAME = "pr-${GIT_BRANCH.toLowerCase()}"
+=======
+    PR_NAME = "${env.BRANCH_NAME}"
+>>>>>>> 53ecf14e27a5a8f50b52aef0d2d5437f4a50c326
     SONARQUBE_URL_INT = 'http://sonarqube:9000'
     SONARQUBE_URL_EXT = "https://sonarqube-${TOOLSPROJECT}.pathfinder.gov.bc.ca"
   }
@@ -315,10 +399,17 @@ pipeline {
       steps {
         script {
           // sh("oc extract secret/rocket-chat-secrets --to=${env.WORKSPACE} --confirm")
+<<<<<<< HEAD
           def existingDeploy = checkForPRDeployment()
           echo "My branch is: ${PR_NAME}"
           echo "Deploy exists: ${existingDeploy}"
           if (!existingDeploy) {
+=======
+          echo "My branch is: ${PR_NAME}"
+          echo "Jenkins says branch: ${env.BRANCH_NAME}"
+          echo "Jenkins says URL: ${env.CHANGE_URL}"
+          if (!checkForPRDeployment()) {
+>>>>>>> 53ecf14e27a5a8f50b52aef0d2d5437f4a50c326
             // env hasn't been created, call setup scripts
             echo "Deploying PR Environment"
             createPRDeployment()
@@ -355,6 +446,7 @@ pipeline {
               bcObj2.untilEach(1) {
                 return it.object().status.phase == "Complete"
               }
+
 
               echo "Build done"
 
