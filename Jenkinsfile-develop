@@ -261,6 +261,18 @@ def createPRDeployment() {
   }
 }
 
+def cleanUpLock() {
+  def manager = org.jenkins.plugins.lockableresources.LockableResourcesManager.get()
+  def resources = manager.getResources().findAll{
+    !it.locked && it.name.equalsIgnoreCase(lockName)
+  }
+  resources.each{
+    manager.getResources().remove(it)
+    echo "Removing lock: ${lockName}"
+  }
+  manager.save()
+}
+
 def CHANGELOG = "No new changes"
 def IMAGE_HASH = "latest"
 def lockName = "eagle-public-${env.JOB_NAME}-${env.BUILD_NUMBER}"
@@ -402,16 +414,7 @@ pipeline {
     stage('Cleanup') {
       steps {
         echo "Removing pipeline lock and cleaning up deployment"
-
-        def manager = org.jenkins.plugins.lockableresources.LockableResourcesManager.get()
-        def resources = manager.getResources().findAll{
-          !it.locked && it.name.equalsIgnoreCase(lockName)
-        }
-        resources.each{
-          manager.getResources().remove(it)
-          echo "Removing lock: ${lockName}"
-        }
-        manager.save()
+        cleanUpLock()
       }
     }
   }
