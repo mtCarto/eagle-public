@@ -217,9 +217,9 @@ def checkForPRDeployment() {
   }
   if (dcCount == 0) {
     echo "no deployments, return false"
-    return 'false'
+    return false
   } else {
-    return 'true'
+    return true
   }
 }
 
