@@ -206,8 +206,9 @@ def sonarQubeJenkinsNode () {
 
 boolean checkForPRDeployment() {
   _openshift(env.STAGE_NAME, DEVPROJECT) {
+    def dcCount = 99;
     try {
-      def dcCount = openshift.selector('dc', "${PR_NAME}-eagle-public").count()
+      dcCount = openshift.selector('dc', "${PR_NAME}-eagle-public").count()
     } catch (error) {
       echo "${stackTraceAsString(error)}"
       return 'false'
