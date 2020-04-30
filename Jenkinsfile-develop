@@ -206,7 +206,12 @@ def sonarQubeJenkinsNode () {
 
 boolean checkForPRDeployment() {
   _openshift(env.STAGE_NAME, DEVPROJECT) {
-    def dcCount = openshift.selector('dc', "${PR_NAME}-eagle-public").count()
+    try {
+      def dcCount = openshift.selector('dc', "${PR_NAME}-eagle-public").count()
+    } catch (error) {
+      echo "${stackTraceAsString(error)}"
+      return 'false'
+    }
     echo "count: ${dcCount}"
     if (dcCount == 0) {
       echo "no deployments, return false"
@@ -282,7 +287,7 @@ pipeline {
     TOOLSPROJECT = "md4m71-tools"
     DEVPROJECT = "md4m71-dev"
     GIT_BRANCH = sh(returnStdout: true, script: 'git rev-parse --abbrev-ref HEAD').trim()
-    PR_NAME = GIT_BRANCH.toLowerCase()
+    PR_NAME = "pr-${GIT_BRANCH.toLowerCase()}"
     SONARQUBE_URL_INT = 'http://sonarqube:9000'
     SONARQUBE_URL_EXT = "https://sonarqube-${TOOLSPROJECT}.pathfinder.gov.bc.ca"
   }
@@ -311,6 +316,7 @@ pipeline {
           // sh("oc extract secret/rocket-chat-secrets --to=${env.WORKSPACE} --confirm")
           def existingDeploy = checkForPRDeployment()
           echo "My branch is: ${PR_NAME}"
+          echo "Deploy exists: ${existingDeploy}"
           if (!existingDeploy) {
             // env hasn't been created, call setup scripts
             echo "Deploying PR Environment"
