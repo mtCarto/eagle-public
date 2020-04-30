@@ -237,6 +237,8 @@ def createPRDeployment() {
         fi
         git clone https://github.com/mtcarto/eagle-helper-pods
         cd eagle-helper-pods/openshift/setup-teardown/
+        echo "show env"
+        env
 
         # set project to PR deployment template folder
         find . -name "projectset.config" -exec sed -i -e "s/^\\( *TARGET_PROJECT_SET=*\\)[^ ]*\\(.*\\)*$/\\1PR\\2/" {} \\;
@@ -315,6 +317,7 @@ pipeline {
           // sh("oc extract secret/rocket-chat-secrets --to=${env.WORKSPACE} --confirm")
           echo "My branch is: ${PR_NAME}"
           echo "Jenkins says branch: ${env.BRANCH_NAME}"
+          echo "Jenkins says URL: ${env.CHANGE_URL}"
           if (!checkForPRDeployment()) {
             // env hasn't been created, call setup scripts
             echo "Deploying PR Environment"
