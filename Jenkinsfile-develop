@@ -232,7 +232,7 @@ def createFullPRDeployment() {
     echo "Configuring deployment scripts"
     try {
       sh '''
-        if [[ -d "eagle-helper-pods" ]]
+        if [ -d "eagle-helper-pods" ]
         then
           echo "stale helper pods checkout, removing it"
           pwd
@@ -251,23 +251,27 @@ def createFullPRDeployment() {
          # set public vars to pr fork
         cd public
         find . -name "*.config" -exec sed -i -e "s/branch-placeholder/${PR_NAME}/g" {} \\;
+        find . -name "*.config" -exec sed -i -e "s/fork-placeholder/${PR_FORK}/g" {} \\;
         find . -name "*.params" -exec sed -i -e "s/fork-placeholder/${PR_FORK}/g" {} \\;
         find . -name "*.params" -exec sed -i -e "s/pr-placeholder/${PR_NAME}/g" {} \\;
         find . -name "*.params" -exec sed -i -e "s/branch-placeholder/${PR_NAME}/g" {} \\;
 
           # set api, admin to bcgov/develop
         cd ../api
+        find . -name "*.config" -exec sed -i -e "s/branch-placeholder/develop/g" {} \\;
+        find . -name "*.config" -exec sed -i -e "s/fork-placeholder/bcgov/g" {} \\;
         find . -name "*.params" -exec sed -i -e "s/fork-placeholder/bcgov/g" {} \\;
         find . -name "*.params" -exec sed -i -e "s/pr-placeholder/${PR_NAME}/g" {} \\;
         find . -name "*.params" -exec sed -i -e "s/branch-placeholder/develop/g" {} \\;
-        find . -name "*.config" -exec sed -i -e "s/branch-placeholder/develop/g" {} \\;
+
+
 
         cd ../admin
+        find . -name "*.config" -exec sed -i -e "s/branch-placeholder/develop/g" {} \\;
+        find . -name "*.config" -exec sed -i -e "s/fork-placeholder/bcgov/g" {} \\;
         find . -name "*.params" -exec sed -i -e "s/fork-placeholder/bcgov/g" {} \\;
         find . -name "*.params" -exec sed -i -e "s/pr-placeholder/${PR_NAME}/g" {} \\;
         find . -name "*.params" -exec sed -i -e "s/branch-placeholder/develop/g" {} \\;
-        find . -name "*.config" -exec sed -i -e "s/branch-placeholder/develop/g" {} \\;
-
 
         cd ../public/dev
         find . -name "*.params" -exec sed -i -e "s/TAG_NAME=dev/TAG_NAME=${PR_NAME}/g" {} \\;
@@ -440,10 +444,31 @@ pipeline {
       // }
     // }
 
+    // todo pause for input here?
     stage('Cleanup') {
       steps {
-        echo "Removing pipeline lock and cleaning up deployment"
-        cleanUpLock()
+        script {
+          echo "Removing pipeline lock and cleaning up deployment"
+          cleanUpLock()
+          def inputAction = input(
+            message: "Are you ready to cleanup ${PR_NAME} deployment?",
+            ok: 'Confirm',
+            parameters: [
+              choice(
+                name: 'action',
+                choices: 'Clean-up\nIgnore',
+                description: 'What would you like to do?'
+              )
+            ]
+          )
+          if ('Clean-up'.equalsIgnoreCase(inputAction)) {
+            sh 'ls'
+            sh '''
+              cd eagle-helper-pods/openshift/setup-teardown/
+              ./teardown-all.sh
+            '''
+          }
+        }
       }
     }
   }
