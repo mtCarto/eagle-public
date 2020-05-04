@@ -53,6 +53,7 @@ def _openshift(String name, String project, Closure body) {
                 )
               ]
             )
+            // todo add a call to cleanup if we 'ignore' failure (change ignore to cleanup)
             if ('Ignore'.equalsIgnoreCase(inputAction)) {
               notifyRocketChat(
                 "@all The build ${env.BUILD_DISPLAY_NAME} of eagle-public-pr, seems to be broken.\n ${env.RUN_DISPLAY_URL}\n Error: \n ${error.message}",
@@ -206,6 +207,7 @@ def sonarQubeJenkinsNode () {
   }
 }
 
+// todo adjust or add one more check
 def checkForPRDeployment() {
   def dcCount = 99;
   _openshift(env.STAGE_NAME, TOOLSPROJECT) {
@@ -225,7 +227,7 @@ def checkForPRDeployment() {
   }
 }
 
-def createPRDeployment() {
+def createFullPRDeployment() {
   openshift.withCluster() {
     echo "Configuring deployment scripts"
     try {
@@ -240,16 +242,34 @@ def createPRDeployment() {
         git clone https://github.com/mtcarto/eagle-helper-pods
         cd eagle-helper-pods/openshift/setup-teardown/
 
-        # set project to PR deployment template folder
+          # set project to PR deployment template folder
         find . -name "projectset.config" -exec sed -i -e "s/^\\( *TARGET_PROJECT_SET=*\\)[^ ]*\\(.*\\)*$/\\1PR\\2/" {} \\;
 
-        # set unique name (ie. pr-branchName) for pr builds & deployments
+          # set unique name (ie. pr-branchName) for pr builds & deployments
         cd params/CUSTOM_SETTINGS/PR
-        find . -name "*.params" -exec sed -i -e "s/pr-placeholder/${PR_FORK}/g" {} \\;
-        find . -name "*.params" -exec sed -i -e "s/pr-placeholder/${PR_NAME}/g" {} \\;
         find . -name "*.config" -exec sed -i -e "s/pr-placeholder/${PR_NAME}/g" {} \\;
+         # set public vars to pr fork
+        cd public
+        find . -name "*.config" -exec sed -i -e "s/branch-placeholder/${PR_NAME}/g" {} \\;
+        find . -name "*.params" -exec sed -i -e "s/fork-placeholder/${PR_FORK}/g" {} \\;
+        find . -name "*.params" -exec sed -i -e "s/pr-placeholder/${PR_NAME}/g" {} \\;
+        find . -name "*.params" -exec sed -i -e "s/branch-placeholder/${PR_NAME}/g" {} \\;
 
-        cd public/dev
+          # set api, admin to bcgov/develop
+        cd ../api
+        find . -name "*.params" -exec sed -i -e "s/fork-placeholder/bcgov/g" {} \\;
+        find . -name "*.params" -exec sed -i -e "s/pr-placeholder/${PR_NAME}/g" {} \\;
+        find . -name "*.params" -exec sed -i -e "s/branch-placeholder/develop/g" {} \\;
+        find . -name "*.config" -exec sed -i -e "s/branch-placeholder/develop/g" {} \\;
+
+        cd ../admin
+        find . -name "*.params" -exec sed -i -e "s/fork-placeholder/bcgov/g" {} \\;
+        find . -name "*.params" -exec sed -i -e "s/pr-placeholder/${PR_NAME}/g" {} \\;
+        find . -name "*.params" -exec sed -i -e "s/branch-placeholder/develop/g" {} \\;
+        find . -name "*.config" -exec sed -i -e "s/branch-placeholder/develop/g" {} \\;
+
+
+        cd ../public/dev
         find . -name "*.params" -exec sed -i -e "s/TAG_NAME=dev/TAG_NAME=${PR_NAME}/g" {} \\;
 
         # create builds and deploys
@@ -289,7 +309,7 @@ pipeline {
   environment {
     TOOLSPROJECT = "md4m71-tools"
     DEVPROJECT = "md4m71-dev"
-    PR_NAME = "${env.BRANCH_NAME}".toLowerCase()
+    PR_NAME = "${env.CHANGE_BRANCH}".toLowerCase()
     PR_FORK = "${env.CHANGE_FORK}"
     SONARQUBE_URL_INT = 'http://sonarqube:9000'
     SONARQUBE_URL_EXT = "https://sonarqube-${TOOLSPROJECT}.pathfinder.gov.bc.ca"
@@ -322,7 +342,7 @@ pipeline {
           if (!checkForPRDeployment()) {
             // env hasn't been created, call setup scripts
             echo "Deploying PR Environment"
-            createPRDeployment()
+            createFullPRDeployment()
           } else {
             echo "Deployment for this PR already exists, skipping deploy all"
           }
@@ -425,6 +445,14 @@ pipeline {
         echo "Removing pipeline lock and cleaning up deployment"
         cleanUpLock()
       }
+    }
+  }
+  post {
+    success {
+      echo 'Build and deploy complete'
+    }
+    failure {
+      echo 'Something went wrong, check deploy and builds'
     }
   }
 }

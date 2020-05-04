@@ -19,15 +19,107 @@ def notifyRocketChat(text, url) {
     sh("curl -X POST -H 'Content-Type: application/json' --data \'${payload}\' ${rocketChatURL}")
 }
 
+// Print stack trace of error
+@NonCPS
+private static String stackTraceAsString(Throwable t) {
+    StringWriter sw = new StringWriter();
+    t.printStackTrace(new PrintWriter(sw));
+    return sw.toString()
+}
+
+def _openshift(String name, String project, Closure body) {
+  script {
+    openshift.withCluster() {
+      openshift.withProject(project) {
+        echo "Running Stage '${name}'"
+        waitUntil {
+          boolean isDone=false
+          try {
+            body()
+            isDone=true
+            echo "Completed Stage '${name}'"
+          } catch (error) {
+            echo "${stackTraceAsString(error)}"
+            def inputAction = input(
+              message: "This step (${name}) has failed. See related messages:",
+              ok: 'Confirm',
+              parameters: [
+                choice(
+                  name: 'action',
+                  choices: 'Re-run\nIgnore',
+                  description: 'What would you like to do?'
+                )
+              ]
+            )
+            // todo add a call to cleanup if we 'ignore' failure (change ignore to cleanup)
+            if ('Ignore'.equalsIgnoreCase(inputAction)) {
+              notifyRocketChat(
+                "@all The build ${env.BUILD_DISPLAY_NAME} of eagle-public-pr, seems to be broken.\n ${env.RUN_DISPLAY_URL}\n Error: \n ${error.message}",
+              ROCKET_DEPLOY_WEBHOOK
+              )
+              isDone=true
+            }
+          }
+          return isDone
+        }
+      }
+    }
+  }
+}
 
 pipeline {
+  environment {
+    TOOLSPROJECT = "md4m71-tools"
+  }
   agent any
   stages {
 
+    stage('Build and Tag Dev'){
+      when {
+        // todo verify this condidtional
+        expression { env.BRANCH_NAME == 'develop' }
+      }
+      steps {
+        script {
+          _openshift(env.STAGE_NAME, TOOLSPROJECT) {
+            timeout(10) {
+              // sh("oc extract secret/rocket-chat-secrets --to=${env.WORKSPACE} --confirm")
+              // ROCKET_DEPLOY_WEBHOOK = sh(returnStdout: true, script: 'cat rocket-deploy-webhook')
+              // ROCKET_QA_WEBHOOK = sh(returnStdout: true, script: 'cat rocket-qa-webhook')
+
+              echo "Building eagle-public develop branch"
+              // trigger and wait for s2i build to complete
+              def bcObj1 = openshift.selector('bc', "eagle-public-angular-builder")
+              bcObj1.untilEach(1) {
+                return it.object().status.phase == "Complete"
+              }
+              //  trigger and wait for nginx image build to complete
+              def bcObj2 = openshift.selector('bc',"eagle-public-build" )
+              bcObj2.untilEach(1) {
+                return it.object().status.phase == "Complete"
+              }
+
+
+              echo "Build done"
+
+              echo ">>> Get Image Hash"
+              // Don't tag with BUILD_ID so the pruner can do it's job; it won't delete tagged images.
+              // Tag the images for deployment based on the image's hash
+              IMAGE_HASH = sh (
+                script: """oc get istag eagle-public:latest -o template --template=\"{{.image.dockerImageReference}}\"|awk -F \":\" \'{print \$3}\'""",
+                returnStdout: true).trim()
+              echo ">> IMAGE_HASH: ${IMAGE_HASH}"
+            }
+
+            openshift.tag("${TOOLSPROJECT}/${PR_NAME}-eagle-public:${IMAGE_HASH}", "${TOOLSPROJECT}/${PR_NAME}-eagle-public:${PR_NAME}")
+          }
+        }
+      }
+    }
 
    stage('Tag Dev as Test'){
       when {
-        expression { env.CHANGE_TARGET == 'test' }
+        expression { env.BRANCH_NAME == 'test' }
       }
       steps {
         script {
@@ -65,7 +157,7 @@ pipeline {
 
     stage('Tag Test as Prod'){
       when {
-        expression { env.CHANGE_TARGET == 'master' }
+        expression { env.BRANCH_NAME == 'master' }
       }
       steps {
         script {
@@ -98,7 +190,6 @@ pipeline {
         }
       }
     }
-
 
   }
 }
