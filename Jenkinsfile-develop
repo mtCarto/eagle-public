@@ -51,6 +51,7 @@ def _openshift(String name, String project, Closure body) {
                 )
               ]
             )
+            // todo add a call to cleanup if we 'ignore' failure (change ignore to cleanup)
             if ('Ignore'.equalsIgnoreCase(inputAction)) {
               notifyRocketChat(
                 "@all The build ${env.BUILD_DISPLAY_NAME} of eagle-public-pr, seems to be broken.\n ${env.RUN_DISPLAY_URL}\n Error: \n ${error.message}",
@@ -251,17 +252,21 @@ def createFullPRDeployment() {
         find . -name "*.config" -exec sed -i -e "s/branch-placeholder/${PR_NAME}/g" {} \\;
         find . -name "*.params" -exec sed -i -e "s/fork-placeholder/${PR_FORK}/g" {} \\;
         find . -name "*.params" -exec sed -i -e "s/pr-placeholder/${PR_NAME}/g" {} \\;
+        find . -name "*.params" -exec sed -i -e "s/branch-placeholder/${PR_NAME}/g" {} \\;
 
           # set api, admin to bcgov/develop
         cd ../api
         find . -name "*.params" -exec sed -i -e "s/fork-placeholder/bcgov/g" {} \\;
-        find . -name "*.params" -exec sed -i -e "s/branch-placeholder/develop/g" {} \\;
         find . -name "*.params" -exec sed -i -e "s/pr-placeholder/${PR_NAME}/g" {} \\;
+        find . -name "*.params" -exec sed -i -e "s/branch-placeholder/develop/g" {} \\;
+        find . -name "*.config" -exec sed -i -e "s/branch-placeholder/develop/g" {} \\;
 
         cd ../admin
         find . -name "*.params" -exec sed -i -e "s/fork-placeholder/bcgov/g" {} \\;
-        find . -name "*.params" -exec sed -i -e "s/branch-placeholder/develop/g" {} \\;
         find . -name "*.params" -exec sed -i -e "s/pr-placeholder/${PR_NAME}/g" {} \\;
+        find . -name "*.params" -exec sed -i -e "s/branch-placeholder/develop/g" {} \\;
+        find . -name "*.config" -exec sed -i -e "s/branch-placeholder/develop/g" {} \\;
+
 
         cd ../public/dev
         find . -name "*.params" -exec sed -i -e "s/TAG_NAME=dev/TAG_NAME=${PR_NAME}/g" {} \\;
