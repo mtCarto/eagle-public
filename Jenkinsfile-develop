@@ -20,6 +20,7 @@ def notifyRocketChat(text, url) {
     sh("curl -X POST -H 'Content-Type: application/json' --data \'${payload}\' ${rocketChatURL}")
 }
 
+
 // Print stack trace of error
 @NonCPS
 private static String stackTraceAsString(Throwable t) {
