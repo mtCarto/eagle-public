@@ -204,6 +204,7 @@ def sonarQubeJenkinsNode () {
   }
 }
 
+// todo adjust or add one more check
 def checkForPRDeployment() {
   def dcCount = 99;
   _openshift(env.STAGE_NAME, TOOLSPROJECT) {
@@ -223,7 +224,7 @@ def checkForPRDeployment() {
   }
 }
 
-def createPRDeployment() {
+def createFullPRDeployment() {
   openshift.withCluster() {
     echo "Configuring deployment scripts"
     try {
@@ -241,13 +242,28 @@ def createPRDeployment() {
         # set project to PR deployment template folder
         find . -name "projectset.config" -exec sed -i -e "s/^\\( *TARGET_PROJECT_SET=*\\)[^ ]*\\(.*\\)*$/\\1PR\\2/" {} \\;
 
-        # set unique name (ie. pr-branchName) for pr builds & deployments
+        env
+          # set unique name (ie. pr-branchName) for pr builds & deployments
         cd params/CUSTOM_SETTINGS/PR
-        find . -name "*.params" -exec sed -i -e "s/pr-placeholder/${PR_FORK}/g" {} \\;
-        find . -name "*.params" -exec sed -i -e "s/pr-placeholder/${PR_NAME}/g" {} \\;
         find . -name "*.config" -exec sed -i -e "s/pr-placeholder/${PR_NAME}/g" {} \\;
+         # set public vars to pr fork
+        cd public
+        find . -name "*.config" -exec sed -i -e "s/branch-placeholder/${PR_NAME}/g" {} \\;
+        find . -name "*.params" -exec sed -i -e "s/fork-placeholder/${PR_FORK}/g" {} \\;
+        find . -name "*.params" -exec sed -i -e "s/pr-placeholder/${PR_NAME}/g" {} \\;
 
-        cd public/dev
+          # set api, admin to bcgov/develop
+        cd ../api
+        find . -name "*.params" -exec sed -i -e "s/fork-placeholder/bcgov/g" {} \\;
+        find . -name "*.params" -exec sed -i -e "s/branch-placeholder/develop/g" {} \\;
+        find . -name "*.params" -exec sed -i -e "s/pr-placeholder/${PR_NAME}/g" {} \\;
+
+        cd ../admin
+        find . -name "*.params" -exec sed -i -e "s/fork-placeholder/bcgov/g" {} \\;
+        find . -name "*.params" -exec sed -i -e "s/branch-placeholder/develop/g" {} \\;
+        find . -name "*.params" -exec sed -i -e "s/pr-placeholder/${PR_NAME}/g" {} \\;
+
+        cd ../public/dev
         find . -name "*.params" -exec sed -i -e "s/TAG_NAME=dev/TAG_NAME=${PR_NAME}/g" {} \\;
 
         # create builds and deploys
@@ -320,7 +336,7 @@ pipeline {
           if (!checkForPRDeployment()) {
             // env hasn't been created, call setup scripts
             echo "Deploying PR Environment"
-            createPRDeployment()
+            createFullPRDeployment()
           } else {
             echo "Deployment for this PR already exists, skipping deploy all"
           }
