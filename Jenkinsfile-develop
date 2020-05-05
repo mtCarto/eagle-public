@@ -93,6 +93,7 @@ boolean sonarqubeReportComplete ( String oldDate, String sonarqubeStatusUrl, def
   def newSonarqubeReportDate = sonarGetDate ( sh ( returnStdout: true, script: "curl -w '%{http_code}' '${sonarqubeStatusUrl}'" ) )
   int delay = 0
 
+
   for (int i=0; i<iterations; i++) {
     echo "waiting for sonarqube report, iterator is: ${i}, max iterator is: ${iterations} \n Old Date: ${oldSonarqubeReportDate} \n New Date: ${newSonarqubeReportDate}"
     if (oldSonarqubeReportDate != newSonarqubeReportDate) {
