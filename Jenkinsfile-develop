@@ -87,6 +87,7 @@ def sonarGetDate (jsonPayload) {
   return jsonSlurper.parseText(jsonPayload).projectStatus.periods[0].date
 }
 
+
 boolean sonarqubeReportComplete ( String oldDate, String sonarqubeStatusUrl, def iterations = 6 ) {
   def oldSonarqubeReportDate = oldDate
   def newSonarqubeReportDate = sonarGetDate ( sh ( returnStdout: true, script: "curl -w '%{http_code}' '${sonarqubeStatusUrl}'" ) )
