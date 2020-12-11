@@ -1,0 +1,25 @@
+<div class="popup-content">
+  <div class="popup-title">
+    <span class="popup__label">Area of Interest</span>
+  </div>
+  <div class="popup-body">
+    <div class="aoi-details">
+      <div class="meta-container">
+        <ul>
+          <li class="aoi-input">
+            <input type="text">
+          </li>
+          <li>
+            <!-- todo add date range picker -->
+          </li>
+        </ul>
+      </div>
+
+      <hr>
+      <!-- todo convert to submit, similar to cac  -->
+      <a class="app-link btn btn-primary" [routerLink]="['/p', proj?._id]" title="View more information about this project">
+        Submit
+      </a>
+    </div>
+  </div>
+</div>
