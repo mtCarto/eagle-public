@@ -4,6 +4,7 @@ import { Subject } from 'rxjs/Subject';
 import 'leaflet';
 import 'leaflet.markercluster';
 import * as _ from 'lodash';
+import 'leaflet-draw';
 
 import { Project } from 'app/models/project';
 import { ProjectService } from 'app/services/project.service';
@@ -17,6 +18,7 @@ declare module 'leaflet' {
   export interface Marker<P = any> {
     projectId: number;
   }
+
 }
 
 const L = window['L'];
@@ -36,8 +38,6 @@ const markerIconYellowLg = L.icon({
   // iconRetinaUrl: 'assets/images/marker-icon-yellow-lg.svg',
   iconSize: [48, 48],
   iconAnchor: [24, 48],
-  // popupAnchor: [1, -34], // TODO: update, if needed
-  // tooltipAnchor: [16, -28] // TODO: update, if needed
 });
 
 @Component({
@@ -64,6 +64,26 @@ export class ProjlistMapComponent implements AfterViewInit, OnChanges, OnDestroy
   });
   public loading = false;
   private ngUnsubscribe: Subject<boolean> = new Subject<boolean>();
+
+  // Drawing properites + layer
+  private drawnItems = new L.FeatureGroup();
+  private drawControl = new L.Control.Draw({
+    draw: {
+      marker: false,
+      polyline: false
+    },
+    edit: {
+      featureGroup: this.drawnItems
+    }
+  });
+
+  private drawControlEditOnly = new L.Control.Draw({
+    edit: {
+      featureGroup: this.drawnItems
+    },
+    // valid, but typing is missing for false case
+    draw: false
+  });
 
   readonly defaultBounds = L.latLngBounds([48, -139], [60, -114]); // all of BC
 
@@ -138,7 +158,7 @@ export class ProjlistMapComponent implements AfterViewInit, OnChanges, OnDestroy
       zoomControl: false, // will be added manually below
       maxBounds: L.latLngBounds(L.latLng(-90, -180), L.latLng(90, 180)), // restrict view to "the world"
       zoomSnap: 0.1, // for greater granularity when fitting bounds
-      attributionControl: false
+      attributionControl: false,
     });
 
     // map state change events
@@ -185,6 +205,32 @@ export class ProjlistMapComponent implements AfterViewInit, OnChanges, OnDestroy
 
     // add reset view control
     this.map.addControl(new resetViewControl());
+
+    // add draw control
+    // const drawControl = new L.Control.Draw({
+    //   draw: {
+    //     marker: false,
+    //     polyline: false
+    //   },
+    //   edit: {
+    //     featureGroup: this.drawnItems
+    //   }
+    // });
+
+    // const drawControlEditOnly = new L.Control.Draw({
+    //   edit: {
+    //     featureGroup: this.drawnItems
+    //   },
+    //   draw: {}
+    // });
+    this.map.addControl(this.drawControl);
+    this.map.addLayer(this.drawnItems);
+
+
+   /* tslint:disable:no-unused-variable */
+    this.map.on(L.Draw.Event.CREATED, this.onDrawCreate.bind(this) );
+
+    this.map.on(L.Draw.Event.DELETED, this.onDrawDelete.bind(this));
 
     // load base layer
     for (const key of Object.keys(baseLayers)) {
@@ -312,10 +358,6 @@ export class ProjlistMapComponent implements AfterViewInit, OnChanges, OnDestroy
     * Removes deleted / draws added projects.
     */
   private drawMap(deletedApps: Project[], addedApps: Project[]) {
-    // console.log('drawing map');
-    // console.log('deleted =', this.deleted);
-    // console.log('added =', this.added);
-
     // remove deleted apps from list and map
     deletedApps.forEach(app => {
       const markerIndex = _.findIndex(this.markerList, { projectId: app._id });
@@ -442,4 +484,19 @@ export class ProjlistMapComponent implements AfterViewInit, OnChanges, OnDestroy
   public onLoadStart() { this.loading = true; }
 
   public onLoadEnd() { this.loading = false; }
+
+  private onDrawCreate(e) {
+    // const id = e.sourceTarget.layerId;
+    this.drawnItems.addLayer(e.layer);
+    this.map.removeControl(this.drawControl);
+    this.map.addControl(this.drawControlEditOnly);
+    // todo trigger popup or modal to enter info
+  }
+
+  private onDrawDelete() {
+    if (this.drawnItems.getLayers().length === 0) {
+      this.map.removeControl(this.drawControlEditOnly);
+      this.map.addControl(this.drawControl);
+    }
+  }
 }
